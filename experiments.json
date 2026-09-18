@@ -4,8 +4,9 @@
       "id": "hero_headline_test",
       "trafficAllocation": 10000,
       "variations": [
-        { "id": "control", "weight": 5000 },
-        { "id": "variant_a", "weight": 5000 }
+        { "id": "control", "weight": 3333 },
+        { "id": "variant_a", "weight": 3333 },
+        { "id": "variant_b", "weight": 3334 },
       ]
     }
   ]
