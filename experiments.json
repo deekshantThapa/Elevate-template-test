@@ -6,7 +6,7 @@
       "variations": [
         { "id": "control", "weight": 3333 },
         { "id": "variant_a", "weight": 3333 },
-        { "id": "variant_b", "weight": 3334 },
+        { "id": "variant_b", "weight": 3334 }
       ]
     }
   ]
