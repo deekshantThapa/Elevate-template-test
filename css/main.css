@@ -2278,7 +2278,6 @@ header .logo a {
  * ------------------------------------------------------------------- */
 #download {
 	position: relative;
-	background-image: url(../images/download-bg.jpg);
 	background-attachment: fixed;
 	background-repeat: no-repeat;
 	background-position: center top;
