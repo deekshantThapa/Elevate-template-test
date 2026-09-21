@@ -1,18 +1,25 @@
 /**
  * Mini CRO Engine — MVP
- * Loads experiments.json, buckets the visitor deterministically,
- * runs the matching variation function (from cro-variations.js),
- * then reveals the page.
  *
  * Load order in <head>:
- *   1. anti-flicker inline snippet (hides <html>)
- *   2. cro-variations.js   (defines window.croVariations)
- *   3. cro-engine.js       (this file)
+ *   1. cro-variations.js   (defines window.croVariations)
+ *   2. cro-engine.js       (this file)
+ *
+ * QA / preview override:
+ *   ?cro_preview=hero_headline_test.variant_b forces a specific variation.
+ *
+ * Results:
+ *   Open the console and run  croGetResults()  to see pageviews,
+ *   conversions, and conversion rate per variation.
  */
+
 (function () {
   var CONFIG_URL = 'experiments.json';
   var COOKIE_NAME = '_cro_vid';
-  var BUCKET_SIZE = 10000; // same resolution Optimizely uses internally
+  var EVENTS_KEY = 'cro_events';
+  var BUCKET_SIZE = 10000;
+
+  var currentVisitorId = null;
 
   // 1. Get or create a persistent visitor ID (180-day cookie)
   function getVisitorId() {
@@ -25,11 +32,10 @@
   }
 
   // 2. Deterministic string hash -> integer bucket (0 to BUCKET_SIZE-1)
-  //    Same visitorId + experimentId always produces the same bucket.
   function hashToBucket(str) {
     var hash = 0;
     for (var i = 0; i < str.length; i++) {
-      hash = (hash * 31 + str.charCodeAt(i)) >>> 0; // unsigned 32-bit
+      hash = (hash * 31 + str.charCodeAt(i)) >>> 0;
     }
     return hash % BUCKET_SIZE;
   }
@@ -37,7 +43,7 @@
   // 3. Decide which variation (if any) this visitor falls into
   function assignVariation(visitorId, experiment) {
     var bucket = hashToBucket(visitorId + experiment.id);
-    if (bucket >= experiment.trafficAllocation) return null; // outside the test entirely
+    if (bucket >= experiment.trafficAllocation) return null;
 
     var cumulative = 0;
     for (var i = 0; i < experiment.variations.length; i++) {
@@ -47,25 +53,68 @@
     return null;
   }
 
-  // 4. Remove the anti-flicker hide class
+  // 4. Read ?cro_preview=exp.variation[,exp2.variation2] from the URL
+  function getPreviewOverrides() {
+    var params = new URLSearchParams(window.location.search);
+    var raw = params.get('cro_preview');
+    var overrides = {};
+    if (raw) {
+      raw.split(',').forEach(function (pair) {
+        var parts = pair.split('.');
+        if (parts.length === 2) overrides[parts[0].trim()] = parts[1].trim();
+      });
+    }
+    return overrides;
+  }
+
   function revealPage() {
     document.documentElement.classList.remove('cro-hide');
   }
 
+  // 5. Log an event (pageview or conversion) into localStorage
+  function trackEvent(eventName, experimentId, variationId) {
+    try {
+      var events = JSON.parse(localStorage.getItem(EVENTS_KEY) || '[]');
+      events.push({
+        visitorId: currentVisitorId,
+        experimentId: experimentId,
+        variationId: variationId,
+        event: eventName,
+        ts: Date.now()
+      });
+      localStorage.setItem(EVENTS_KEY, JSON.stringify(events));
+      console.log('[CRO] event:', eventName, experimentId, variationId);
+    } catch (e) {
+      console.error('[CRO] failed to track event', e);
+    }
+  }
+
+  // 6. Wire up the goal element (if configured) to fire a conversion event
+  function attachGoalListener(experiment, variationId) {
+    if (!experiment.goalSelector) return;
+    var el = document.querySelector(experiment.goalSelector);
+    if (!el) return;
+    el.addEventListener('click', function () {
+      trackEvent('conversion', experiment.id, variationId);
+    });
+  }
+
   function init(config) {
-    var visitorId = getVisitorId();
+    currentVisitorId = getVisitorId();
+    var previewOverrides = getPreviewOverrides();
     var assignments = {};
 
     (config.experiments || []).forEach(function (experiment) {
-      var variationId = assignVariation(visitorId, experiment);
-      assignments[experiment.id] = variationId || 'control';
+      var forced = previewOverrides[experiment.id];
+      var variationId = forced || assignVariation(currentVisitorId, experiment);
+      var finalVariationId = variationId || 'control';
+      assignments[experiment.id] = finalVariationId;
 
       if (variationId && variationId !== 'control') {
         var action =
           window.croVariations &&
           window.croVariations[experiment.id] &&
           window.croVariations[experiment.id][variationId];
-
         if (typeof action === 'function') {
           try {
             action();
@@ -74,15 +123,36 @@
           }
         }
       }
+
+      // Every visitor counts as exposed, regardless of which variation they got
+      trackEvent('pageview', experiment.id, finalVariationId);
+      attachGoalListener(experiment, finalVariationId);
     });
 
-    // Stash assignments globally — next step (event tracking) will read this
     window.croAssignments = assignments;
-    window.croVisitorId = visitorId;
-    console.log('[CRO] visitor', visitorId, 'assignments', assignments);
+    window.croVisitorId = currentVisitorId;
+    console.log('[CRO] visitor', currentVisitorId, 'assignments', assignments);
 
     revealPage();
   }
+
+  // 7. Console helper: tally events into pageviews / conversions / rate per variation
+  window.croGetResults = function () {
+    var events = JSON.parse(localStorage.getItem(EVENTS_KEY) || '[]');
+    var stats = {};
+    events.forEach(function (e) {
+      var key = e.experimentId + ' / ' + e.variationId;
+      if (!stats[key]) stats[key] = { pageviews: 0, conversions: 0 };
+      if (e.event === 'pageview') stats[key].pageviews++;
+      if (e.event === 'conversion') stats[key].conversions++;
+    });
+    Object.keys(stats).forEach(function (key) {
+      var s = stats[key];
+      s.conversionRate = s.pageviews ? ((s.conversions / s.pageviews) * 100).toFixed(1) + '%' : '0%';
+    });
+    console.table(stats);
+    return stats;
+  };
 
   fetch(CONFIG_URL)
     .then(function (r) {
@@ -91,6 +161,6 @@
     .then(init)
     .catch(function (err) {
       console.error('[CRO] failed to load config, showing original page', err);
-      revealPage(); // never leave the page hidden if something breaks
+      revealPage();
     });
 })();
