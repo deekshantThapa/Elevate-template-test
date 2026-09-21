@@ -1,4 +1,4 @@
-This is the **Elevate** landing page template by [Styleshout](http://www.styleshout.com/) deployed here purely for
+This is the landing page template by (http://www.styleshout.com/) deployed here purely for
 testing an in-house A/B testing engine.
 
 The goal is to understand and replicate, at a small scale, how client-side experimentation
@@ -8,7 +8,7 @@ tracking — before building anything more permanent.
 ### What's being tested
 
 | File | Role |
-|---|---|
+
 | `experiments.json` | Experiment config — traffic split, variation weights, goal selector |
 | `cro-variations.js` | Variation code — the DOM changes per variation |
 | `cro-engine.js` | Runtime — visitor bucketing, variation dispatch, event tracking |
