@@ -83,9 +83,9 @@
         ts: Date.now()
       });
       localStorage.setItem(EVENTS_KEY, JSON.stringify(events));
-      console.log('[CRO] event:', eventName, experimentId, variationId);
+      console.log('cro event:', eventName, experimentId, variationId);
     } catch (e) {
-      console.error('[CRO] failed to track event', e);
+      console.error('cro failed to track event', e);
     }
   }
 
@@ -119,7 +119,7 @@
           try {
             action();
           } catch (e) {
-            console.error('[CRO] variation error in', experiment.id, variationId, e);
+            console.error('cro variation error in', experiment.id, variationId, e);
           }
         }
       }
@@ -131,7 +131,7 @@
 
     window.croAssignments = assignments;
     window.croVisitorId = currentVisitorId;
-    console.log('[CRO] visitor', currentVisitorId, 'assignments', assignments);
+    console.log('cro visitor', currentVisitorId, 'assignments', assignments);
 
     revealPage();
   }
@@ -160,7 +160,7 @@
     })
     .then(init)
     .catch(function (err) {
-      console.error('[CRO] failed to load config, showing original page', err);
+      console.error('cro failed to load config, showing original page', err);
       revealPage();
     });
 })();
