@@ -12,12 +12,15 @@
  *   Open the console and run  croGetResults()  to see pageviews,
  *   conversions, and conversion rate per variation.
  */
-
 (function () {
   var CONFIG_URL = 'experiments.json';
   var COOKIE_NAME = '_cro_vid';
   var EVENTS_KEY = 'cro_events';
   var BUCKET_SIZE = 10000;
+
+  // Paste your Google Apps Script Web App URL here after deploying it
+  var BACKEND_URL =
+    'https://script.google.com/macros/s/AKfycbye8g2rMA0EWhpaZxLTiBxqRcIJaIe4Qu9u7d9EdkYGUzfYbg6HtGg1Q92lA5cZ4XLdOQ/exec';
 
   var currentVisitorId = null;
 
@@ -73,20 +76,36 @@
 
   // 5. Log an event (pageview or conversion) into localStorage
   function trackEvent(eventName, experimentId, variationId) {
+    var payload = {
+      visitorId: currentVisitorId,
+      experimentId: experimentId,
+      variationId: variationId,
+      event: eventName,
+      ts: Date.now()
+    };
+
+    // Local copy — keeps croGetResults() working for quick in-browser checks
     try {
       var events = JSON.parse(localStorage.getItem(EVENTS_KEY) || '[]');
-      events.push({
-        visitorId: currentVisitorId,
-        experimentId: experimentId,
-        variationId: variationId,
-        event: eventName,
-        ts: Date.now()
-      });
+      events.push(payload);
       localStorage.setItem(EVENTS_KEY, JSON.stringify(events));
-      console.log('cro event:', eventName, experimentId, variationId);
     } catch (e) {
-      console.error('cro failed to track event', e);
+      console.error('cro failed to save event locally', e);
     }
+
+    // Shared copy — every real visitor's events land in the same Sheet
+    if (BACKEND_URL && BACKEND_URL.indexOf('PASTE_') !== 0) {
+      fetch(BACKEND_URL, {
+        method: 'POST',
+        mode: 'no-cors', // Apps Script doesn't return CORS headers; fire-and-forget is fine here
+        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+        body: JSON.stringify(payload)
+      }).catch(function (err) {
+        console.error('cro failed to send event to backend', err);
+      });
+    }
+
+    console.log('cro event:', eventName, experimentId, variationId);
   }
 
   // 6. Wire up the goal element (if configured) to fire a conversion event
